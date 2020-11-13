@@ -32,12 +32,11 @@
 
 #include <list>
 #include <numeric>
-#include <boost/timer/timer.hpp>
+#include <boost/timer.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/random_generator.hpp>
 
 #include "misc_os_dependent.h"
-#include "syncobj.h"
 
 namespace epee
 {
@@ -230,57 +229,44 @@ namespace math_helper
 		}
 
 	}
-	template<uint64_t scale, int default_interval, bool start_immediate = true>
-	class once_a_time
+PRAGMA_WARNING_PUSH
+PRAGMA_GCC("GCC diagnostic ignored \"-Wstrict-aliasing\"")
+  inline
+  uint64_t generated_random_uint64()
+  {
+    boost::uuids::uuid id___ = boost::uuids::random_generator()();
+    return  *reinterpret_cast<uint64_t*>(&id___.data[0]); //(*reinterpret_cast<uint64_t*>(&id___.data[0]) ^ *reinterpret_cast<uint64_t*>(&id___.data[8]));
+  }
+PRAGMA_WARNING_POP
+	template<int default_interval, bool start_immediate = true>
+	class once_a_time_seconds
 	{
-    uint64_t get_time() const
-    {
-#ifdef _WIN32
-      FILETIME fileTime;
-      GetSystemTimeAsFileTime(&fileTime);
-      unsigned __int64 present = 0;
-      present |= fileTime.dwHighDateTime;
-      present = present << 32;
-      present |= fileTime.dwLowDateTime;
-      present /= 10;  // mic-sec
-      return present;
-#else
-      struct timeval tv;
-      gettimeofday(&tv, NULL);
-      return tv.tv_sec * 1000000 + tv.tv_usec;
-#endif
-    }
-
 	public:
-		once_a_time():m_interval(default_interval * scale)
+		once_a_time_seconds():m_interval(default_interval)
 		{
 			m_last_worked_time = 0;
       if(!start_immediate)
-        m_last_worked_time = get_time();
+        time(&m_last_worked_time);
 		}
 
 		template<class functor_t>
 		bool do_call(functor_t functr)
 		{
-			uint64_t current_time = get_time();
+			time_t current_time = 0;
+			time(&current_time);
 
       if(current_time - m_last_worked_time > m_interval)
 			{
 				bool res = functr();
-				m_last_worked_time = get_time();
+				time(&m_last_worked_time);
 				return res;
 			}
 			return true;
 		}
 
 	private:
-		uint64_t m_last_worked_time;
-		uint64_t m_interval;
+		time_t m_last_worked_time;
+		time_t m_interval;
 	};
-
-  template<int default_interval, bool start_immediate = true>
-  class once_a_time_seconds: public once_a_time<1000000, default_interval, start_immediate> {};
-  template<int default_interval, bool start_immediate = true>
-  class once_a_time_milliseconds: public once_a_time<1000, default_interval, start_immediate> {};
 }
 }
